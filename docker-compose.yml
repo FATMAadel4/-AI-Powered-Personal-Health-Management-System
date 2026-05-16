@@ -1,0 +1,121 @@
+services:
+  mysql:
+    image: mysql:8
+    container_name: healthtrack-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - healthtrack-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:alpine
+    container_name: healthtrack-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - healthtrack-network
+
+  chromadb:
+    image: chromadb/chroma:0.4.24
+    container_name: healthtrack-chroma
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    networks:
+      - healthtrack-network
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: healthtrack-auth
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/healthtrack_auth?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - healthtrack-network
+
+  health-service:
+    build:
+      context: ./health-service
+      dockerfile: Dockerfile
+    container_name: healthtrack-health
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/healthtrack_health?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - healthtrack-network
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: healthtrack-ai
+    ports:
+      - "8083:8083"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: gpt-4o-mini
+      CHROMA_URL: http://chromadb:8000
+      JWT_SECRET: ${JWT_SECRET}
+    depends_on:
+      - chromadb
+    networks:
+      - healthtrack-network
+
+  notification-service:
+    build:
+      context: ./Notification_Service
+      dockerfile: Dockerfile
+    container_name: healthtrack-notification
+    ports:
+      - "8084:8084"
+    environment:
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${NOTIFICATION_MAIL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+    networks:
+      - healthtrack-network
+
+volumes:
+  mysql-data:
+  chroma-data:
+
+networks:
+  healthtrack-network:
+    driver: bridge

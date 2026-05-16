@@ -1,0 +1,23 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: notification-service
+
+  # Mail — Gmail
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: fatmaadelmo@gmail.com
+    password: jbap znpl hvrt mdom
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+# نفس الـ secret
+jwt:
+  secret: myverysecuresecretkeythatislongenough1234567890abcdef
